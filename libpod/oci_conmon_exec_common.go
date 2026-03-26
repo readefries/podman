@@ -590,6 +590,14 @@ func attachExecHTTP(c *Container, sessionID string, r *http.Request, w http.Resp
 		return fmt.Errorf("flushing HTTP hijack header: %w", err)
 	}
 
+	// Buffered channel to safely pass the deferred error to the goroutine
+	// below. Reading deferredErr directly in the goroutine would be a data
+	// race as it is a named return value that may be written concurrently.
+	deferredErrCh := make(chan error, 1)
+	defer func() {
+		deferredErrCh <- deferredErr
+	}()
+
 	go func() {
 		// Wait for conmon to succeed, when return.
 		if err := execCmd.Wait(); err != nil {
@@ -609,7 +617,7 @@ func attachExecHTTP(c *Container, sessionID string, r *http.Request, w http.Resp
 		// Can't be a defer, because this would block the function from
 		// returning.
 		<-holdConnOpen
-		hijackWriteErrorAndClose(deferredErr, c.ID(), isTerminal, httpCon, httpBuf)
+		hijackWriteErrorAndClose(<-deferredErrCh, c.ID(), isTerminal, httpCon, httpBuf)
 	}()
 
 	stdoutChan := make(chan error)
