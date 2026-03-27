@@ -120,10 +120,16 @@ func convertLibpodNetworktoDockerNetwork(runtime *libpod.Runtime, statuses []abi
 		if !ok {
 			return nil, fmt.Errorf("invalid gateway IP %v", sub.Gateway)
 		}
+		var ipRange netip.Prefix
+		if sub.LeaseRange != nil && sub.LeaseRange.StartIP != nil {
+			if startAddr, ok := netip.AddrFromSlice(sub.LeaseRange.StartIP); ok {
+				ipRange = netip.PrefixFrom(startAddr.Unmap(), subnet.Bits())
+			}
+		}
 		ipamConfig := dockerNetwork.IPAMConfig{
 			Subnet:  subnet,
 			Gateway: gateway,
-			// TODO add range
+			IPRange: ipRange,
 		}
 		ipamConfigs = append(ipamConfigs, ipamConfig)
 	}
